@@ -2,7 +2,7 @@
 
 # DocketShield App
 
-### The tenant-facing side of DocketShield: from served papers to a ready-to-file Answer.
+### The tenant-facing side of DocketShield: from served papers to a reviewable Answer draft and filing guidance.
 
 A mobile-first guided flow for Georgia renters who have just been served a dispossessory warrant. The tenant photographs the papers or types the details, confirms every extracted field against the evidence the model saw, gets the exact 7-day Answer deadline with a day-by-day timeline, answers plain-language questions about their situation, and receives the options the court recognizes plus a draft Answer laid out like the official check-box form, with every rule linked to the court source it came from.
 
@@ -23,7 +23,7 @@ A mobile-first guided flow for Georgia renters who have just been served a dispo
 
 ## What It Does
 
-A Georgia tenant has seven calendar days after service to file an Answer, and most people learn that on day five. The app turns that week into eight short steps. The tenant scans the warrant (Gemini vision extracts the case number, county, parties, and service date, each with a confidence score and the exact text it read) or enters it by hand. Nothing moves forward until the tenant confirms every field. The deadline step shows the filing date, the 5:00 PM cutoff, how many days are left, and a timeline that marks which days were skipped for weekends or named Georgia state holidays. The situation step asks four short groups of yes/no questions, then shows cures, defenses, counterclaims, and checks, each with its source linked. The Answer step renders a draft laid out like the court's check-box form, with every checked box explained and every missing field listed, and the final step routes the tenant to filing and free legal help. The app never files anything and says so on every screen that matters.
+A Georgia tenant has seven calendar days after service to file an Answer, and most people learn that on day five. The app turns that week into eight short steps. The tenant scans the warrant (Gemini vision extracts the case number, county, parties, and service date, each with a confidence score and the exact text it read) or enters it by hand. Nothing moves forward until the tenant confirms every field. The deadline step shows the filing date, the 5:00 PM cutoff, how many days are left, and a timeline that marks which days were skipped for weekends or named Georgia state holidays. The situation step asks four short groups of yes/no questions, then shows cures, defenses, counterclaims, and checks, each with its source linked. The Answer step renders a draft laid out like the court's check-box form, with every checked box explained and every missing field listed, and the final step routes the tenant to filing and free legal help. The app never files anything. Local office details are shown only for Fulton County; other counties are directed to the court on the summons. Unsupported holiday-calendar years stop calculation.
 
 ## How It Works
 
@@ -32,7 +32,7 @@ A Georgia tenant has seven calendar days after service to file an Answer, and mo
 - `src/server.ts`: the SSR entry, which adds a strict Content-Security-Policy, HSTS, `nosniff`, frame denial, and a camera-only Permissions-Policy to every response and replaces swallowed server errors with a readable error page.
 - `src/routes/__root.tsx`: document head (description, Open Graph and Twitter cards, favicon, theme color), plus the not-found and error screens.
 - `src/styles.css`: the design tokens (Inter and Source Serif 4, one brand blue) and the court-paper, timeline, and segmented-control styles.
-- Engine and API: [jayblast-spec/docketshield](https://github.com/jayblast-spec/docketshield) at [docketshield.vercel.app](https://docketshield.vercel.app), with the deadline rules, triage, Answer drafting, and Gemini extraction covered by 35 Vitest cases.
+- Engine and API: [jayblast-spec/docketshield](https://github.com/jayblast-spec/docketshield) at [docketshield.vercel.app](https://docketshield.vercel.app), with the deadline rules, triage, Answer drafting, and Gemini extraction covered by Vitest regression tests.
 
 ## Live
 
@@ -55,3 +55,22 @@ A Georgia tenant has seven calendar days after service to file an Answer, and mo
 ![Footer](https://capsule-render.vercel.app/api?type=waving&color=0:1D4ED8,55:0B1E3D,100:020617&height=120&section=footer&text=ArkNet%20Digital&fontSize=26&fontColor=ffffff&desc=michael@arknet.digital&descAlignY=75)
 
 </div>
+
+## Verify
+
+Requires Node.js 24 for the built-in TypeScript test runner.
+
+```sh
+npm ci
+npm test
+npm run typecheck
+npm run build
+```
+
+## Review boundaries
+
+Every scanned or sample field requires explicit checkbox confirmation; editing clears confirmation. Model confidence and quoted evidence must be checked against the source document. Printed-deadline conflicts are recomputed from edited inputs. The source dialog links directly to official materials.
+
+Rules currently use the engine's verified 2026 holiday calendar. Fulton is the only county with local office details. The draft is based on DeKalb form wording and Fulton information; confirm the accepted form with the court named on the summons. Uploaded documents are sent to Google Gemini; provider retention is not established by this application's code.
+
+Automated tests are developer-authored regression checks, not independent legal validation or measured tenant outcomes. See the engine repository's [validation plan](https://github.com/jayblast-spec/docketshield/blob/main/docs/VALIDATION.md).

@@ -40,6 +40,8 @@ import {
   type TriageResponse,
 } from "@/lib/docketshield";
 
+import { isFultonCounty, fieldsRequiringReview } from "@/lib/review";
+
 const SITE_URL = "https://docketshield-app.vercel.app";
 
 export const Route = createFileRoute("/")({
@@ -195,7 +197,8 @@ function DocketShield() {
       for (const key of fieldNames) nextValues[key] = String(result.fields[key]?.value ?? "");
       setCaseValues(nextValues);
       setExtracted(result.fields);
-      setNeedsConfirmation(result.needsConfirmation);
+      setNeedsConfirmation([...fieldNames]);
+      setTouched(new Set());
       setChecks(result.checks);
       go("Details");
     } catch (caught) {
@@ -206,20 +209,21 @@ function DocketShield() {
   };
 
   const calculateDeadline = async () => {
-    if (!caseValues.serviceDate || !caseValues.serviceMethod) {
-      setError("Enter the service date and how the papers were served before continuing.");
+    if (!caseValues.county.trim() || !caseValues.serviceDate || !caseValues.serviceMethod) {
+      setError("Enter the county, service date, and how the papers were served before continuing.");
       return;
     }
-    const untouched = needsConfirmation.filter((field) => !touched.has(field));
+    const untouched = fieldsRequiringReview(needsConfirmation, touched);
     if (untouched.length) {
-      setError("Please review every amber field before continuing.");
+      setError("Please confirm each field against your papers before continuing.");
       if (untouched[0]) document.getElementById(untouched[0])?.focus();
       return;
     }
     setBusy(true);
     setError("");
     try {
-      setDeadline(await getDeadline(caseValues.serviceDate, caseValues.serviceMethod));
+      setDeadline(await getDeadline(caseValues.serviceDate, caseValues.serviceMethod, caseValues.printedAnswerDeadline));
+      setChecks([]);
       go("Deadline");
     } catch (caught) {
       setError(friendlyError(caught));
@@ -270,14 +274,14 @@ function DocketShield() {
       <Header sample={sample} step={step} currentIndex={currentIndex} furthest={furthest} onBack={back} />
       <main className="mx-auto w-full max-w-3xl px-5 pb-32 pt-10 sm:px-8 sm:pt-14">
         {error && <Notice kind="error">{error}</Notice>}
-        {step === "Start" && <StartScreen onScan={() => go("Scan")} onManual={() => go("Details")} onSample={() => { setSample(true); setCaseValues(sampleCase); setExtracted(sampleFields); setNeedsConfirmation([]); go("Details"); }} />}
+        {step === "Start" && <StartScreen onScan={() => go("Scan")} onManual={() => go("Details")} onSample={() => { setSample(true); setCaseValues(sampleCase); setExtracted(sampleFields); setNeedsConfirmation([...fieldNames]); setTouched(new Set()); go("Details"); }} />}
         {step === "Scan" && <ScanScreen busy={busy} inputRef={fileInput} onFile={handleUpload} onManual={() => go("Details")} />}
-        {step === "Details" && <DetailsScreen values={caseValues} fields={extracted} needsConfirmation={needsConfirmation} touched={touched} checks={checks} busy={busy} onChange={(key, value) => { setCaseValues((current) => ({ ...current, [key]: value })); setTouched((current) => new Set(current).add(key)); }} onContinue={calculateDeadline} />}
+        {step === "Details" && <DetailsScreen values={caseValues} fields={extracted} needsConfirmation={needsConfirmation} touched={touched} checks={checks} busy={busy} onChange={(key, value) => { setCaseValues((current) => ({ ...current, [key]: value })); setTouched((current) => { const next = new Set(current); next.delete(key); return next; }); setChecks([]); setDeadline(null); setTriage(null); setDraft(null); }} onConfirm={(key, confirmed) => setTouched((current) => { const next = new Set(current); if (confirmed) next.add(key); else next.delete(key); return next; })} onContinue={calculateDeadline} />}
         {step === "Deadline" && deadline && <DeadlineScreen result={deadline} values={caseValues} onContinue={() => go("Situation")} />}
         {step === "Situation" && <SituationScreen group={questionGroup} values={facts} caseValues={caseValues} busy={busy} onChange={(key, value) => setFacts((current) => ({ ...current, [key]: value }))} onBackGroup={() => setQuestionGroup((value) => value - 1)} onNext={() => questionGroup < 3 ? setQuestionGroup((value) => value + 1) : submitTriage()} />}
         {step === "Options" && triage && <OptionsScreen result={triage} busy={busy} onContinue={makeDraft} />}
         {step === "Answer" && draft && <DraftScreen result={draft} onContinue={() => go("File")} />}
-        {step === "File" && deadline && <FileScreen deadline={deadline} />}
+        {step === "File" && deadline && <FileScreen deadline={deadline} county={caseValues.county} />}
       </main>
       <TrustFooter />
     </div>
@@ -300,8 +304,8 @@ function Header({ sample, step, currentIndex, furthest, onBack }: { sample: bool
 function StartScreen({ onScan, onManual, onSample }: { onScan: () => void; onManual: () => void; onSample: () => void }) {
   return <section className="animate-enter">
     <p className="mb-5 flex items-center gap-2 font-semibold text-primary"><Scale aria-hidden="true" /> Georgia eviction Answer</p>
-    <h1 className="max-w-2xl font-serif text-5xl font-semibold leading-[1.06] sm:text-6xl">You have 7 days to answer. Let’s get the date exactly right.</h1>
-    <p className="mt-7 max-w-xl text-lg leading-8 text-muted-foreground">In Georgia, if no Answer is filed within 7 days of being served, the landlord can ask to remove you on day 8.</p>
+    <h1 className="max-w-2xl font-serif text-5xl font-semibold leading-[1.06] sm:text-6xl">Served eviction papers? Check your deadline and prepare your response.</h1>
+    <p className="mt-7 max-w-xl text-lg leading-8 text-muted-foreground">Georgia generally gives you 7 days after service to answer. Check the date on your summons and confirm any uncertainty with the court clerk.</p>
     <div className="mt-10 grid gap-3 sm:max-w-md"><Button size="lg" onClick={onScan}><Camera /> Scan my papers</Button><Button size="lg" variant="outline" onClick={onManual}>Enter details by hand <ArrowRight /></Button></div>
     <Button variant="link" onClick={onSample} className="mt-5">Try with a sample case</Button>
     <p className="mt-14 text-sm text-muted-foreground">Legal information, not legal advice.</p>
@@ -313,21 +317,22 @@ function ScanScreen({ busy, inputRef, onFile, onManual }: { busy: boolean; input
     <StepTitle icon={<Camera />} title="Scan your papers" copy="Take a clear photo or choose a PDF. Make sure the court heading, case number, and service date are visible." />
     <input ref={inputRef} type="file" accept="image/*,application/pdf" className="sr-only" aria-label="Choose eviction papers" onChange={(event) => onFile(event.target.files?.[0])} />
     {busy ? <div className="scan-zone" role="status" aria-live="polite"><LoaderCircle className="animate-spin text-primary" aria-hidden="true" /><h2 className="font-serif text-2xl font-semibold">Reading your papers…</h2><p className="text-muted-foreground">This may take a moment. Please keep this page open.</p></div> : <button type="button" className="scan-zone" onClick={() => inputRef.current?.click()}><FileText className="text-primary" aria-hidden="true" /><span className="font-serif text-2xl font-semibold">Choose a photo or PDF</span><span className="text-muted-foreground">Up to 20 MB</span></button>}
-    <p className="mt-5 flex items-center gap-2 text-sm text-muted-foreground"><LockKeyhole aria-hidden="true" className="size-4" /> Your photo is read once and never saved.</p>
+    <p className="mt-5 flex items-center gap-2 text-sm text-muted-foreground"><LockKeyhole aria-hidden="true" className="size-4" /> Your document is sent to Google Gemini for extraction. Review its data-use terms before uploading personal information.</p>
     <Button variant="link" onClick={onManual} className="mt-6">Enter details by hand instead</Button>
   </section>;
 }
 
-function DetailsScreen({ values, fields, needsConfirmation, touched, checks, busy, onChange, onContinue }: { values: CaseValues; fields: ExtractedFields; needsConfirmation: string[]; touched: Set<string>; checks: Array<{ kind: string; message: string }>; busy: boolean; onChange: (key: FieldName, value: string) => void; onContinue: () => void }) {
-  return <section className="animate-enter"><StepTitle icon={<FileText />} title="Confirm the details" copy="Check these against your papers. You can correct anything that was read incorrectly." />
-    <div className="space-y-3">{checks.map((check, index) => <Notice key={`${check.kind}-${index}`} kind={check.kind === "deadline-mismatch" ? "warning" : "info"}>{check.message}</Notice>)}</div>
+function DetailsScreen({ values, fields, needsConfirmation, touched, checks, busy, onChange, onConfirm, onContinue }: { values: CaseValues; fields: ExtractedFields; needsConfirmation: string[]; touched: Set<string>; checks: Array<{ kind: string; message: string }>; busy: boolean; onChange: (key: FieldName, value: string) => void; onConfirm: (key: FieldName, confirmed: boolean) => void; onContinue: () => void }) {
+  return <section className="animate-enter"><StepTitle icon={<FileText />} title="Confirm the details" copy="Check each field against your papers, correct any errors, and tick its confirmation box. If an optional field is not stated, leave it blank and confirm that." />
+    <div className="space-y-3">{checks.map((check, index) => <Notice key={`${check.kind}-${index}`} kind={check.kind === "deadline-mismatch" || check.kind === "deadline-unverified" ? "warning" : "info"}>{check.message}</Notice>)}</div>
     <div className="mt-8 space-y-6">{fieldNames.map((key) => {
       const field = fields[key]; const required = needsConfirmation.includes(key) && !touched.has(key);
       return <div key={key} className={required ? "field-wrap field-check" : "field-wrap"}>
         <div className="mb-2 flex items-center justify-between gap-3"><label htmlFor={key} className="font-semibold">{FIELD_LABELS[key]}</label>{field && <span className={field.confidence >= .85 ? "confidence-high" : "confidence-check"}>{field.confidence >= .85 ? "High" : "Check"}</span>}</div>
         {key === "serviceMethod" || key === "claimReason" ? <select id={key} value={values[key]} onChange={(event) => onChange(key, event.target.value)} className="form-control"><option value="">Select one</option>{(key === "serviceMethod" ? [["personal","Handed to me"],["left-with-adult","Left with an adult"],["tack-and-mail","Posted and mailed"],["unknown","Not sure"]] : [["nonpayment","Nonpayment of rent"],["lease-breach","Lease breach"],["holdover","Stayed after tenancy ended"],["other","Other"]]).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select> : <input id={key} type={key === "serviceDate" || key === "printedAnswerDeadline" ? "date" : "text"} value={values[key]} onChange={(event) => onChange(key, event.target.value)} className="form-control" />}
         {field?.evidence && <p className="mt-2 text-sm italic text-muted-foreground">Read from your papers: “{field.evidence}”</p>}
-        {required && <p className="mt-2 text-sm font-semibold text-warning">Please check this field.</p>}
+        {needsConfirmation.includes(key) && <label className="mt-3 flex items-start gap-3 text-sm"><input type="checkbox" checked={touched.has(key)} onChange={(event) => onConfirm(key, event.target.checked)} className="mt-1" /> I checked this field against my papers, or confirmed it is not stated.</label>}
+        {required && <p className="mt-2 text-sm font-semibold text-warning">Confirmation required.</p>}
       </div>;
     })}</div>
     <Button size="lg" className="mt-10 w-full sm:w-auto" onClick={onContinue} disabled={busy}>{busy ? <LoaderCircle className="animate-spin" /> : null} Get my deadline <ArrowRight /></Button>
@@ -376,10 +381,10 @@ function DraftScreen({ result, onContinue }: { result: DraftResponse; onContinue
   </section>;
 }
 
-function FileScreen({ deadline }: { deadline: DeadlineResponse }) {
+function FileScreen({ deadline, county }: { deadline: DeadlineResponse; county: string }) {
   return <section className="animate-enter"><StepTitle icon={<Check />} title="File it and get help" copy={`File your Answer by ${formatLongDate(deadline.deadline)} at ${deadline.cutoff}. Keep a copy for yourself.`} />
-    <ol className="filing-list"><li><span>1</span><div><h2>Review and sign your Answer</h2><p>Fill in anything marked as missing and make sure every statement is true.</p></div></li><li><span>2</span><div><h2>File before your deadline</h2><p>File at your county clerk’s office or use <a href="https://www.odysseyefilega.com" target="_blank" rel="noreferrer">Odyssey eFileGA</a>.</p></div></li><li><span>3</span><div><h2>Get free legal help now</h2><p>Ask a lawyer to review your situation before the hearing if possible.</p></div></li></ol>
-    <div className="office-panel"><h2 className="font-serif text-2xl font-semibold">Fulton County Magistrate Court Clerk</h2><address className="mt-3 not-italic">Suite TG-100, Justice Center Tower<br />185 Central Avenue SW, Atlanta</address><p className="mt-2"><a href="tel:+14046135360">404-613-5360</a><br />Monday–Friday, 8:30 AM–5:00 PM</p><p className="mt-4 text-sm">Free public e-filing terminals and the Housing Court Assistance Center are available in Suite TG-100.</p></div>
+    <ol className="filing-list"><li><span>1</span><div><h2>Review and sign your Answer</h2><p>Fill in anything marked as missing and make sure every statement is true.</p></div></li><li><span>2</span><div><h2>File before your deadline</h2><p>Confirm the filing method with the court named on your summons. Ask whether your case accepts <a href="https://www.odysseyefilega.com" target="_blank" rel="noreferrer">Odyssey eFileGA</a> before using it.</p></div></li><li><span>3</span><div><h2>Get free legal help now</h2><p>Ask a lawyer to review your situation before the hearing if possible.</p></div></li></ol>
+    {isFultonCounty(county) ? <div className="office-panel"><h2 className="font-serif text-2xl font-semibold">Fulton County Magistrate Court Clerk</h2><address className="mt-3 not-italic">Suite TG-100, Justice Center Tower<br />185 Central Avenue SW, Atlanta</address><p className="mt-2"><a href="tel:+14046135360">404-613-5360</a><br />Monday–Friday, 8:30 AM–5:00 PM</p><p className="mt-4 text-sm">Free public e-filing terminals and the Housing Court Assistance Center are available in Suite TG-100.</p></div> : <Notice kind="warning">Your case is in {county || "an unspecified county"}. DocketShield currently provides local filing details only for Fulton County. Use the court and clerk contact information on your summons to confirm the correct location, accepted filing method, hours, and required form. Do not travel to the Fulton office for a case in another county.</Notice>}
     <h2 className="mt-10 font-serif text-3xl font-semibold">Free legal help</h2><ul className="help-links"><li><a href="https://atlantalegalaid.org" target="_blank" rel="noreferrer">Atlanta Legal Aid Society</a></li><li><a href="https://glsp.org" target="_blank" rel="noreferrer">Georgia Legal Services Program</a></li><li><a href="https://avlf.org" target="_blank" rel="noreferrer">Atlanta Volunteer Lawyers Foundation</a></li></ul>
     <Notice kind="warning">If you lose at the hearing, you have 7 days to appeal; to stay in your home during an appeal you must pay the judgment and future rent into the court registry.</Notice>
   </section>;
@@ -394,7 +399,7 @@ function TrustFooter() {
 }
 
 function SourcesDialog() {
-  return <Dialog.Root><Dialog.Trigger asChild><button type="button" className="footer-link">Sources</button></Dialog.Trigger><Dialog.Portal><Dialog.Overlay className="fixed inset-0 z-50 bg-overlay" /><Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-background p-7 shadow-xl"><Dialog.Title className="font-serif text-3xl font-semibold">Sources</Dialog.Title><Dialog.Description className="mt-2 text-muted-foreground">The official materials used by DocketShield.</Dialog.Description><ul className="mt-6 list-disc space-y-3 pl-5"><li>Fulton County Magistrate Court Tenant Pamphlet</li><li>DeKalb County official Dispossessory Answer form</li><li>Georgia.gov 2026 State Holidays</li></ul><Dialog.Close className="dialog-close" aria-label="Close sources"><X /></Dialog.Close></Dialog.Content></Dialog.Portal></Dialog.Root>;
+  return <Dialog.Root><Dialog.Trigger asChild><button type="button" className="footer-link">Sources</button></Dialog.Trigger><Dialog.Portal><Dialog.Overlay className="fixed inset-0 z-50 bg-overlay" /><Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-background p-7 shadow-xl"><Dialog.Title className="font-serif text-3xl font-semibold">Sources</Dialog.Title><Dialog.Description className="mt-2 text-muted-foreground">The official materials used by DocketShield.</Dialog.Description><ul className="mt-6 list-disc space-y-3 pl-5"><li><a href="https://www.fultoncountyga.gov/-/media/Departments/Magistrate-Court/Court-Resources/Tenant-Pamphlet.pdf" target="_blank" rel="noreferrer">Fulton County Magistrate Court Tenant Pamphlet</a></li><li><a href="https://dekalbgastatecourt.gov/wp-content/uploads/2025/10/DISPOSSESSORY-ANSWER-CHECK-BOX-fillable.pdf" target="_blank" rel="noreferrer">DeKalb County official Dispossessory Answer form</a></li><li><a href="https://georgia.gov/georgia-state-holidays-2026" target="_blank" rel="noreferrer">Georgia.gov 2026 State Holidays</a></li></ul><Dialog.Close className="dialog-close" aria-label="Close sources"><X /></Dialog.Close></Dialog.Content></Dialog.Portal></Dialog.Root>;
 }
 
 function formatLongDate(value: string) { const [year = 1970, month = 1, day = 1] = value.split("-").map(Number); return new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, day))); }

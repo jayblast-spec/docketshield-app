@@ -111,8 +111,8 @@ async function post<T>(path: string, body: unknown, schema: z.ZodType<T>): Promi
 export const extractPapers = (mimeType: string, image: string) =>
   post("/api/extract", { mimeType, image }, extractionSchema);
 
-export const getDeadline = (serviceDate: string, serviceMethod: string) =>
-  post("/api/deadline", { serviceDate, serviceMethod }, deadlineSchema);
+export const getDeadline = (serviceDate: string, serviceMethod: string, printedAnswerDeadline = "") =>
+  post("/api/deadline", { serviceDate, serviceMethod, printedAnswerDeadline }, deadlineSchema);
 
 export const getTriage = (facts: Facts) => post("/api/triage", { facts }, triageSchema);
 
