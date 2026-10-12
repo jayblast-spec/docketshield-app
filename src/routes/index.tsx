@@ -341,7 +341,7 @@ function DetailsScreen({ values, fields, needsConfirmation, touched, checks, bus
 
 function DeadlineScreen({ result, values, onContinue }: { result: DeadlineResponse; values: CaseValues; onContinue: () => void }) {
   const date = formatLongDate(result.deadline);
-  const countdown = result.daysRemaining < 0 ? "The deadline has passed. Call the clerk and legal aid now" : result.daysRemaining === 0 ? "Today is your last day" : `${result.daysRemaining} days left`;
+  const countdown = result.daysRemaining < 0 ? "The deadline has passed. Call the clerk and legal aid now" : result.daysRemaining === 0 ? "Today is your last day" : result.daysRemaining === 1 ? "1 day left" : `${result.daysRemaining} days left`;
   return <section className="animate-enter"><div className="deadline-hero"><p className="text-sm font-bold uppercase text-primary">Your Answer is due</p><h1 className="mt-3 font-serif text-5xl font-semibold leading-none sm:text-7xl">{date}</h1><p className="mt-4 text-2xl font-semibold">by {result.cutoff}</p><p className={result.daysRemaining < 0 ? "countdown-expired" : "countdown"}>{countdown}</p></div>
     {result.warnings.map((warning, index) => <Notice key={index} kind="warning">{warning}</Notice>)}
     <Button variant="outline" className="mt-6" onClick={() => downloadCalendar(result, values)}><CalendarPlus /> Add to calendar</Button>
