@@ -6,7 +6,6 @@
 
 A mobile-first guided flow for Georgia renters who have just been served a dispossessory warrant. The tenant photographs the papers or types the details, confirms every extracted field against the evidence the model saw, gets the exact 7-day Answer deadline with a day-by-day timeline, answers plain-language questions about their situation, and receives the options the court recognizes plus a draft Answer laid out like the official check-box form, with every rule linked to the court source it came from.
 
-[![Live Demo](https://img.shields.io/badge/Live_Demo-docketshield--app.vercel.app-1D4ED8?style=for-the-badge&logo=vercel)](https://docketshield-app.vercel.app)
 [![GitHub Repo](https://img.shields.io/badge/GitHub-Repo-181717?style=for-the-badge&logo=github)](https://github.com/jayblast-spec/docketshield-app)
 
 ![React](https://img.shields.io/badge/React-61DAFB?style=flat-square&logo=react&logoColor=black)
@@ -32,11 +31,11 @@ A Georgia tenant has seven calendar days after service to file an Answer, and mo
 - `src/server.ts`: the SSR entry, which adds a strict Content-Security-Policy, HSTS, `nosniff`, frame denial, and a camera-only Permissions-Policy to every response and replaces swallowed server errors with a readable error page.
 - `src/routes/__root.tsx`: document head (description, Open Graph and Twitter cards, favicon, theme color), plus the not-found and error screens.
 - `src/styles.css`: the design tokens (Inter and Source Serif 4, one brand blue) and the court-paper, timeline, and segmented-control styles.
-- Engine and API: [jayblast-spec/docketshield](https://github.com/jayblast-spec/docketshield) at [docketshield.vercel.app](https://docketshield.vercel.app), with the deadline rules, triage, Answer drafting, and Gemini extraction covered by Vitest regression tests.
+- Engine and API: [jayblast-spec/docketshield](https://github.com/jayblast-spec/docketshield) at *(demo temporarily offline)*, with the deadline rules, triage, Answer drafting, and Gemini extraction covered by Vitest regression tests.
 
 ## Live
 
-[docketshield-app.vercel.app](https://docketshield-app.vercel.app)
+*(demo temporarily offline)*
 
 ## Tech Stack
 
